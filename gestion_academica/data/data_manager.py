@@ -2,6 +2,7 @@ import os
 import json
 
 from gestion_academica.services.cloud_sync import CloudSync
+from gestion_academica.models.notas import DEFAULT_CONFIG
 
 # Ruta al archivo de datos (ahora en gestion_academica/data/ junto a este módulo)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -26,11 +27,22 @@ def init_cloud():
             print(f"⚠️ Error al conectar con la nube: {e}")
             cloud = None
 
+def get_config():
+    """
+    Retorna la configuración actual del sistema de calificaciones.
+    Si no existe en data, retorna la configuración por defecto.
+    """
+    return data.get("__config__", DEFAULT_CONFIG)
+
 # =========================
 # Guardar datos en json y MySQL
 # =========================
 def guardar():
     global data
+    # Asegurar que la config siempre esté presente al guardar
+    if "__config__" not in data:
+        data["__config__"] = DEFAULT_CONFIG
+
     # Abre el archivo en modo escritura
     try:
         with open(DATOS_JSON, "w") as f:
@@ -39,14 +51,14 @@ def guardar():
         print(f"💾 Guardando JSON en: {DATOS_JSON}")
     except Exception as e:
         print(f"❌ Error al guardar JSON: {e}")
-    
-    # Sincroniza con MySQL
+
+    # Sincroniza con la nube (PostgreSQL / MySQL)
     init_cloud()
     if cloud:
-        print("🔥 Sincronizando con MySQL...")
+        print("🔥 Sincronizando con base de datos...")
         cloud.sync_all(data)
     else:
-        print("⏭️ Sincronización MySQL omitida (sin conexión)")
+        print("⏭️ Sincronización omitida (sin conexión)")
 
 
 # ===========================================================================
@@ -55,7 +67,7 @@ def guardar():
 
 def cargar():
     global data
-    
+
     # 1. Cargamos el JSON local (Contiene todos los PARCIALES, LABS, ETC)
     json_data = {}
     try:
@@ -70,44 +82,58 @@ def cargar():
         init_cloud()
         if cloud:
             db_data = cloud.get_all()
-            
-            # Si MySQL tiene datos, los unimos con el historial de JSON
+
+            # Si la nube tiene datos, los unimos con el historial de JSON
             if db_data:
                 # Recorremos la estructura recolectada de la DB
                 for asig_nombre, grupos in db_data.items():
+                    if asig_nombre.startswith("__"):
+                        continue  # Saltamos las claves internas
                     for grupo_nombre, estudiantes in grupos.items():
                         for est in estudiantes:
                             # Intentamos encontrar al mismo estudiante en el JSON local
                             try:
                                 json_grupo = json_data.get(asig_nombre, {}).get(grupo_nombre, [])
                                 json_est = next((e for e in json_grupo if e["nombre"] == est["nombre"]), None)
-                                
-                                # Si lo encontramos, le INYECTAMOS sus parciales para no perderlos,
-                                # ya que MySQL local solo almacena "final" y "portafolio"
+
+                                # Si lo encontramos, le INYECTAMOS sus parciales para no perderlos
                                 if json_est:
-                                    est["notas"]["parciales"] = json_est["notas"].get("parciales", [])
-                                    est["notas"]["labs"] = json_est["notas"].get("labs", [])
+                                    est["notas"]["parciales"]    = json_est["notas"].get("parciales", [])
+                                    est["notas"]["labs"]         = json_est["notas"].get("labs", [])
                                     est["notas"]["asignaciones"] = json_est["notas"].get("asignaciones", [])
-                                    est["notas"]["asistencia"] = json_est["notas"].get("asistencia", 0)
-                            except Exception as fail_merge:
-                                pass # Si falla un estudiante, ignoramos y seguimos
-                
+                                    est["notas"]["asistencia"]   = json_est["notas"].get("asistencia", 0)
+                            except Exception:
+                                pass  # Si falla un estudiante, ignoramos y seguimos
+
                 # Reemplaza todo el entorno local actual con los datos fusionados
                 data.clear()
                 data.update(db_data)
-                print("🌐 Datos cargados desde MySQL (Fusionados exitosamente con historial JSON)")
-                
-                # IMPORTANTE: guardamos inmediatamente al iniciar para que el JSON se retroalimente
+
+                # Recuperar la config de la nube si existe, si no, del JSON local
+                if "__config__" in db_data:
+                    data["__config__"] = db_data["__config__"]
+                elif "__config__" in json_data:
+                    data["__config__"] = json_data["__config__"]
+                else:
+                    data["__config__"] = DEFAULT_CONFIG
+
+                print("🌐 Datos cargados desde base de datos (Fusionados exitosamente con historial JSON)")
+
+                # IMPORTANTE: guardamos inmediatamente para retroalimentar el JSON
                 guardar()
                 return
 
     except Exception as e:
-        print(f"⚠️ Error al sincronizar desde MySQL: {e}")
+        print(f"⚠️ Error al sincronizar desde base de datos: {e}")
 
-    # 3. Si MySQL falla por completo o está vacío, simplemente usamos el JSON recabado previamente
+    # 3. Si la nube falla o está vacía, usamos el JSON local
     data.clear()
     if json_data:
         data.update(json_data)
+        # Asegurar que la config exista
+        if "__config__" not in data:
+            data["__config__"] = DEFAULT_CONFIG
         print("⏭️ Trabajando únicamente con los datos de JSON (Modo Offline o DB Vacía)")
     else:
+        data["__config__"] = DEFAULT_CONFIG
         print("🆕 Iniciando ambiente limpio y vacío.")

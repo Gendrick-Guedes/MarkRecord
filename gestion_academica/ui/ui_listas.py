@@ -1,5 +1,5 @@
 import tkinter as tk
-from gestion_academica.models.notas import SistemaNotas
+from gestion_academica.models.notas import SistemaNotas, DEFAULT_CONFIG
 import random
 
 def limpiar_nombre(texto):
@@ -16,7 +16,10 @@ def actualizar_asignaturas(lista_asignaturas, data, mostrar_checkbox=True):
     lista_asignaturas.delete(0, tk.END)
 
     # Inserta todas las asignaturas ordenadas con o sin prefijo de checkbox
+    # Excluimos las claves internas (como __config__)
     for a in sorted(data.keys()):
+        if a.startswith("__"):
+            continue
         prefijo = "[ ] " if mostrar_checkbox else ""
         lista_asignaturas.insert(tk.END, f"{prefijo}{a}")
 
@@ -38,7 +41,7 @@ def actualizar_grupos(lista_grupos, lista_asignaturas, data, mostrar_checkbox=Tr
     a = limpiar_nombre(a_display)
 
     # Inserta los grupos de la asignatura seleccionada con o sin prefijo de checkbox
-    if a in data:
+    if a in data and not a.startswith("__"):
         for g in sorted(data[a].keys()):
             prefijo = "[ ] " if mostrar_checkbox else ""
             lista_grupos.insert(tk.END, f"{prefijo}{g}")
@@ -61,9 +64,12 @@ def actualizar_estudiantes(lista_estudiantes, lista_asignaturas, lista_grupos, d
     # Obtiene asignatura y grupo seleccionados (quitando prefijos)
     a_display = lista_asignaturas.get(sel_a[0])
     g_display = lista_grupos.get(sel_g[0])
-    
+
     a = limpiar_nombre(a_display)
     g = limpiar_nombre(g_display)
+
+    # Leer configuración activa
+    config = data.get("__config__", DEFAULT_CONFIG)
 
     # Recorre todos los estudiantes del grupo
     if a in data and g in data[a]:
@@ -76,7 +82,7 @@ def actualizar_estudiantes(lista_estudiantes, lista_asignaturas, lista_grupos, d
                     "labs": [],
                     "asignaciones": [],
                     "portafolio": 80,
-                    "asistencia": 100
+                    "asistencia": 0
                 }
 
 #=====================================
@@ -95,7 +101,8 @@ def actualizar_estudiantes(lista_estudiantes, lista_asignaturas, lista_grupos, d
 # Calcular nota final y letra
 #============================
 
-            calc = SistemaNotas(notas_dict)
+            # Pasamos la configuración activa a SistemaNotas
+            calc = SistemaNotas(notas_dict, config=config)
             nota = calc.calcular()
             letra = calc.letra(nota)
 

@@ -1,6 +1,8 @@
 import tkinter as tk
 from tkinter import messagebox
 from gestion_academica.ui.ui_listas import limpiar_nombre
+from gestion_academica.models.notas import DEFAULT_CONFIG
+from launcher.theme import load_theme, apply_theme_to_widget
 
 
 # =========================
@@ -9,7 +11,13 @@ from gestion_academica.ui.ui_listas import limpiar_nombre
 def editar(data, guardar, lista_asignaturas, lista_grupos, lista_estudiantes, actualizar_estudiantes, current_user=None):
 
     rol = current_user.get('role', 'estudiante').lower() if current_user else 'estudiante'
-    
+
+    # Leer configuración activa
+    config = data.get("__config__", DEFAULT_CONFIG)
+    pesos   = config.get("pesos",   DEFAULT_CONFIG["pesos"])
+    limites = config.get("limites", DEFAULT_CONFIG["limites"])
+    asis_total = config.get("asistencia_total", DEFAULT_CONFIG["asistencia_total"])
+
     # =========================
     # Obtener selección actual
     # =========================
@@ -26,7 +34,7 @@ def editar(data, guardar, lista_asignaturas, lista_grupos, lista_estudiantes, ac
     # Editar asignatura
     # =========================
     if sel_a and not sel_g:
-    
+
         # Solo Admin y Director pueden editar el nombre de una asignatura
         if rol not in ['admin', 'director']:
             messagebox.showwarning("Permisos Insuficientes", "Solo el administrador y el director pueden editar asignaturas.")
@@ -57,7 +65,7 @@ def editar(data, guardar, lista_asignaturas, lista_grupos, lista_estudiantes, ac
         # Obtiene asignatura y grupo usando limpiar_nombre
         a_display = lista_asignaturas.get(sel_a[0])
         g_display = lista_grupos.get(sel_g[0])
-        
+
         a = limpiar_nombre(a_display)
         g = limpiar_nombre(g_display)
 
@@ -70,14 +78,14 @@ def editar(data, guardar, lista_asignaturas, lista_grupos, lista_estudiantes, ac
             guardar()
 
     # =========================
-    # Editar estudiante
+    # Editar / Ver estudiante
     # =========================
     elif sel_a and sel_g and sel_e:
 
         # Obtiene datos del estudiante seleccionado usando limpiar_nombre
         a_display = lista_asignaturas.get(sel_a[0])
         g_display = lista_grupos.get(sel_g[0])
-        
+
         a = limpiar_nombre(a_display)
         g = limpiar_nombre(g_display)
         est = data[a][g][sel_e[0]]
@@ -87,113 +95,109 @@ def editar(data, guardar, lista_asignaturas, lista_grupos, lista_estudiantes, ac
         # Crear ventana de edición interactiva
         # =========================
         v = tk.Toplevel()
-        v.title(f"Editando: {est['nombre']}")
-        
+        v.title(f"{'Notas de' if rol == 'estudiante' else 'Editando'}: {est['nombre']}")
+
         # Centrar asegurando que no se mueva a una esquina remota
         try:
             from launcher.selector import centrar_ventana
-            centrar_ventana(v, 400, 550)
+            centrar_ventana(v, 430, 580)
         except ImportError:
-            v.geometry("400x550")
+            v.geometry("430x580")
 
-        # Hace que esta ventana secundaria sea modal (bloquea la interacción con
-        # la ventana principal de gestión hasta que este formulario se cierre)
+        # Hace que esta ventana secundaria sea modal
         v.grab_set()
-        
-        # Transient se asegura de que la sub-ventana minimice o restaure junto
-        # a la ventana padre que la generó
-        v.transient(v.master) 
-        v.focus_set() # Pone el cursor/enfoque inmediatamente en esta ventanita
+        v.transient(v.master)
+        v.focus_set()
 
         # =========================
         # Función para crear campos de entrada con auto-puntuación
         # =========================
         def crear_campo(label, valor, es_lista=False, disabled=False):
             tk.Label(v, text=label, font=("Arial", 10, "bold")).pack()
-            e = tk.Entry(v)
+            e = tk.Entry(v, width=40)
             e.insert(0, valor)
-            
+
             if disabled:
                 e.config(state="readonly")
-                
+
             e.pack(pady=2)
 
             if es_lista and not disabled:
                 # Evento para poner coma automática después de 2 dígitos
                 def auto_coma(event):
-                    # Solo si es un número y no estamos borrando
-                    if event.keysym == "BackSpace": return
-                    
+                    if event.keysym == "BackSpace":
+                        return
                     content = e.get()
-                    # Si los últimos 2 caracteres son números y no hay coma después
                     if len(content) >= 2:
                         last_part = content.split(",")[-1].strip()
                         if len(last_part) == 2 and last_part.isdigit():
                             e.insert(tk.END, ",")
 
                 e.bind("<KeyRelease>", auto_coma)
-            
+
             return e
 
         # =========================
         # Campos de edición (Con restricciones de ROL)
         # =========================
-        
+
         bloquear_nombre = (rol == 'estudiante')
-        bloquear_notas = (rol == 'estudiante')
+        bloquear_notas  = (rol == 'estudiante')
 
         # Campo nombre
         entry_nombre = crear_campo("Nombre Estudiante", est["nombre"], disabled=bloquear_nombre)
 
-        # Campo parciales (30%)
+        # Campo parciales con % dinámico
         e_parciales = crear_campo(
-            "Parciales - 30%",
+            f"Parciales - {pesos.get('parciales', 30)}%  (máx. {limites.get('parciales', 3)} notas)",
             ",".join(str(int(x)) for x in notas.get("parciales", [])),
             es_lista=True,
             disabled=bloquear_notas
         )
 
-        # Campo labs (17%)
+        # Campo labs con % dinámico
         e_labs = crear_campo(
-            "Laboratorios - 17%",
+            f"Laboratorios - {pesos.get('labs', 17)}%  (máx. {limites.get('labs', 10)} notas)",
             ",".join(str(int(x)) for x in notas.get("labs", [])),
             es_lista=True,
             disabled=bloquear_notas
         )
 
-        # Campo asignaciones (10%)
+        # Campo asignaciones con % dinámico
         e_asig = crear_campo(
-            "Asignaciones - 10%",
+            f"Asignaciones - {pesos.get('asignaciones', 10)}%  (máx. {limites.get('asignaciones', 10)} notas)",
             ",".join(str(int(x)) for x in notas.get("asignaciones", [])),
             es_lista=True,
             disabled=bloquear_notas
         )
 
-        # Campo portafolio (5%)
+        # Campo portafolio con % dinámico
         e_port = crear_campo(
-            "Portafolio - 5%",
+            f"Portafolio - {pesos.get('portafolio', 5)}%",
             str(int(notas.get('portafolio', 0))),
             disabled=bloquear_notas
         )
 
-        # Campo asistencia (5%)
-        # Convertimos a entero por si viene como lista del formato anterior
+        # Campo asistencia con % dinámico y total de clases
         asis_val = notas.get("asistencia", 0)
         if isinstance(asis_val, list):
-            asis_val = int(sum(asis_val)/len(asis_val)) if asis_val else 0
-        
+            asis_val = int(sum(asis_val) / len(asis_val)) if asis_val else 0
+
         e_asis = crear_campo(
-            "Asistencia (Clases asistidas de 100) - 5%",
+            f"Asistencia - {pesos.get('asistencia', 5)}%  (clases asistidas de {asis_total})",
             str(int(asis_val)),
             disabled=bloquear_notas
         )
 
-        # Campo semestral (33%)
+        # Campo semestral con % dinámico
         e_semestral = crear_campo(
-            "Examen Semestral - 33%",
+            f"Examen Semestral - {pesos.get('final', 33)}%",
             str(int(notas.get('final', 0))),
             disabled=bloquear_notas
         )
+
+        # Aplica el tema activo (oscuro o claro) a la ventana del editor
+        apply_theme_to_widget(v, load_theme())
 
         # =========================
         # Guardar cambios del estudiante
@@ -207,20 +211,27 @@ def editar(data, guardar, lista_asignaturas, lista_grupos, lista_estudiantes, ac
                 if len(nuevo_nombre) > 60:
                     raise ValueError("¡Error! El nombre es demasiado largo (máximo 60 letras).")
 
-                # Función para validar lista de números
-                def validar_notas(texto, nombre_campo):
+                # Función para validar lista de números con un máximo dinámico
+                def validar_notas(texto, nombre_campo, max_notas):
                     partes = texto.split(",") if texto else []
                     numeros = []
                     for p in partes:
-                        if not p.strip(): continue
+                        if not p.strip():
+                            continue
                         try:
                             val = float(p)
-                        except:
+                        except Exception:
                             raise ValueError(f"¡Error! '{p}' no es un número válido en {nombre_campo}.")
-                        
+
                         if not (0 <= val <= 100):
                             raise ValueError(f"¡Error! La nota {val} en {nombre_campo} debe estar entre 0 y 100.")
                         numeros.append(int(val))
+
+                    if len(numeros) > max_notas:
+                        raise ValueError(
+                            f"¡Error! {nombre_campo} permite un máximo de {max_notas} nota(s) según la "
+                            f"estructura calificativa actual. Tienes {len(numeros)}."
+                        )
                     return numeros
 
                 # Función para validar nota única
@@ -229,47 +240,54 @@ def editar(data, guardar, lista_asignaturas, lista_grupos, lista_estudiantes, ac
                         raise ValueError(f"¡Error! Solo se permite una única nota para {nombre_campo}.")
                     try:
                         val = float(texto) if texto.strip() else 0
-                    except:
+                    except Exception:
                         raise ValueError(f"¡Error! '{texto}' no es un número válido para {nombre_campo}.")
-                    
+
                     if not (0 <= val <= 100):
                         raise ValueError(f"¡Error! La nota de {nombre_campo} debe estar entre 0 y 100.")
                     return int(val)
 
-                # Función para validar asistencia específica
+                # Función para validar asistencia con el total de clases configurado
                 def validar_asistencia(texto):
                     if "," in texto:
-                        raise ValueError("¡Error! La asistencia es un único número de clases (0-100).")
+                        raise ValueError("¡Error! La asistencia es un único número de clases asistidas.")
                     try:
                         val = int(float(texto)) if texto.strip() else 0
-                    except:
+                    except Exception:
                         raise ValueError(f"¡Error! '{texto}' no es un número válido para la asistencia.")
-                    
-                    if not (0 <= val <= 100):
-                        raise ValueError(f"¡Error! El número de clases asistidas debe estar entre 0 y 100.")
+
+                    if not (0 <= val <= asis_total):
+                        raise ValueError(
+                            f"¡Error! El número de clases asistidas debe estar entre 0 y {asis_total} "
+                            f"(total de clases del período)."
+                        )
                     return val
 
-                # Actualiza datos
-                parciales_validados = validar_notas(e_parciales.get(), "Parciales")
-                if not (2 <= len(parciales_validados) <= 3):
-                    raise ValueError("¡Error! En los parciales solo se permiten de 2 a 3 notas.")
+                # Leer y validar límites desde config
+                max_parciales    = limites.get("parciales",    3)
+                max_labs         = limites.get("labs",         10)
+                max_asignaciones = limites.get("asignaciones", 10)
 
+                # Validar cada campo
+                parciales_validados    = validar_notas(e_parciales.get(), "Parciales",    max_parciales)
+                labs_validados         = validar_notas(e_labs.get(),      "Laboratorios", max_labs)
+                asignaciones_validadas = validar_notas(e_asig.get(),      "Asignaciones", max_asignaciones)
+
+                # Actualiza datos del estudiante
                 est["nombre"] = nuevo_nombre
                 est["notas"] = {
-                    "final": validar_unica(e_semestral.get(), "Semestral"),
-                    "parciales": parciales_validados,
-                    "labs": validar_notas(e_labs.get(), "Laboratorios"),
-                    "asignaciones": validar_notas(e_asig.get(), "Asignaciones"),
-                    "portafolio": validar_unica(e_port.get(), "Portafolio"),
-                    "asistencia": validar_asistencia(e_asis.get())
+                    "final":        validar_unica(e_semestral.get(), "Semestral"),
+                    "parciales":    parciales_validados,
+                    "labs":         labs_validados,
+                    "asignaciones": asignaciones_validadas,
+                    "portafolio":   validar_unica(e_port.get(), "Portafolio"),
+                    "asistencia":   validar_asistencia(e_asis.get())
                 }
 
-                # Guarda cambios en json local persistente y en mysql si hay red
+                # Guarda cambios en json local persistente y en la nube si hay red
                 guardar()
 
-                # Actualiza la interfaz visual de estudiantes de manera automática invocando 
-                # a la función "actualizar_estudiantes" sin argumentos (porque desde main.py
-                # ya viene recubierta en un lambda con los argumentos preparados)
+                # Actualiza la interfaz visual de estudiantes
                 actualizar_estudiantes()
 
                 messagebox.showinfo("Éxito", "¡Notas actualizadas correctamente!")
@@ -281,7 +299,7 @@ def editar(data, guardar, lista_asignaturas, lista_grupos, lista_estudiantes, ac
                 messagebox.showerror("Error inesperado", f"Ocurrió algo malo: {e}")
 
         # =========================
-        # Botón para guardar cambios
+        # Botón para guardar o cerrar
         # =========================
         if rol != 'estudiante':
             tk.Button(

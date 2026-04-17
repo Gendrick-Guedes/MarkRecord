@@ -1,7 +1,6 @@
 import os
-import psycopg2
-from psycopg2 import Error
-from psycopg2.extras import RealDictCursor
+import mysql.connector
+from mysql.connector import Error
 from dotenv import load_dotenv
 
 # Carga variables de entorno desde la carpeta config/ donde vive el .env
@@ -22,41 +21,38 @@ class DatabaseAuth:
 
     def conectar(self):
         try:
-            # Primero intenta usar DATABASE_URL (Supabase) directamente
-            database_url = os.getenv("DATABASE_URL")
-            
-            if database_url:
-                self.conn = psycopg2.connect(database_url)
-            else:
-                self.conn = psycopg2.connect(
-                    host=os.getenv("DB_HOST", "127.0.0.1"),
-                    user=os.getenv("DB_USER", "postgres"),     
-                    password=os.getenv("DB_PASSWORD", ""),
-                    dbname=os.getenv("DB_NAME", "postgres"),
-                    port=os.getenv("DB_PORT", "5432")
-                )
+            self.conn = mysql.connector.connect(
+                host=os.getenv("DB_HOST", "127.0.0.1"),
+                user=os.getenv("DB_USER", "root"),     
+                password=os.getenv("DB_PASSWORD", "06102005"),
+                database=os.getenv("DB_NAME", "gestion_academica"),
+                port=os.getenv("DB_PORT", "3306")
+            )
         except Error as e:
             print(f"❌ Error al conectar a la Base de Datos de Usuarios: {e}")
             self.conn = None
 
     def ejecutar_consulta(self, query, params=None):
-        if self.conn and not self.conn.closed:
+        if self.conn and self.conn.is_connected():
             try:
-                cursor = self.conn.cursor(cursor_factory=RealDictCursor)
+                # To clear unread results, though dictionary=True usually reads all
+                cursor = self.conn.cursor(dictionary=True)
                 cursor.execute(query, params or ())
-                return cursor.fetchall()
+                res = cursor.fetchall()
+                cursor.close()
+                return res
             except Error as e:
                 print(f"❌ Error DB Consulta: {e}")
-                self.conn.rollback() # Important in postgres on error
                 return []
         return []
 
     def ejecutar_accion(self, query, params=None):
-        if self.conn and not self.conn.closed:
+        if self.conn and self.conn.is_connected():
             try:
                 cursor = self.conn.cursor()
                 cursor.execute(query, params or ())
                 self.conn.commit()
+                cursor.close()
                 return True
             except Error as e:
                 print(f"❌ Error DB Acción: {e}")

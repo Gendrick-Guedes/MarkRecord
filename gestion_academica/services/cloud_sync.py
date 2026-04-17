@@ -1,3 +1,4 @@
+import json
 from config.db import DatabaseAuth
 
 # =========================================
@@ -8,6 +9,19 @@ class CloudSync:
     # Inicialización de conexión
     def __init__(self):
         self.db = DatabaseAuth()
+        self._ensure_config_table()
+
+    # =========================
+    # Crear tabla de configuración si no existe
+    # =========================
+    def _ensure_config_table(self):
+        """Crea la tabla 'configuracion' en la BD si no existe."""
+        self.db.ejecutar_accion("""
+            CREATE TABLE IF NOT EXISTS configuracion (
+                id INTEGER PRIMARY KEY DEFAULT 1,
+                data TEXT NOT NULL
+            )
+        """)
 
     # =========================
     # Gestión de asignaturas
@@ -83,9 +97,35 @@ class CloudSync:
         ))
 
     # =========================
+    # Guardar configuración calificativa
+    # =========================
+    def guardar_config(self, config):
+        """Reemplaza la configuración guardada en la tabla 'configuracion'."""
+        config_json = json.dumps(config)
+        # Borrar la anterior e insertar la nueva (single-row config)
+        self.db.ejecutar_accion("DELETE FROM configuracion")
+        self.db.ejecutar_accion(
+            "INSERT INTO configuracion (id, data) VALUES (1, %s)",
+            (config_json,)
+        )
+
+    # =========================
+    # Leer configuración calificativa
+    # =========================
+    def get_config(self):
+        """Lee la configuración desde la BD. Retorna None si no hay."""
+        rows = self.db.ejecutar_consulta("SELECT data FROM configuracion WHERE id = 1")
+        if rows:
+            try:
+                return json.loads(rows[0]["data"])
+            except Exception:
+                return None
+        return None
+
+    # =========================
     # Sincronización completa (Carga desde JSON a MySQL)
     # =========================
-    
+
     # Sincroniza todo el sistema local con la base de datos
     def sync_all(self, data):
 
@@ -98,6 +138,10 @@ class CloudSync:
         # Recorre todas las asignaturas existentes en la memoria
         for asignatura, grupos in data.items():
 
+            # Ignorar claves internas como __config__
+            if asignatura.startswith("__"):
+                continue
+
             self.guardar_asignatura(asignatura)
 
             # Recorre grupos de la asignatura actual
@@ -107,19 +151,18 @@ class CloudSync:
 
                 # Recorre estudiantes del grupo actual
                 for est in estudiantes:
-
-                    # Guarda estudiante en su respectivo grupo
-                    # NOTA DE DISEÑO: La BD actual solo tiene las columnas 'final' y 'portafolio', 
-                    # guardamos esos únicos parámetros por ahora para mantener la estructura relacional simple.
-                    # El resto de variables minuciosas seguirán viviendo en la copia de seguridad de datos.json
                     self.guardar_estudiante(asignatura, grupo, est)
 
+        # Sincronizar la configuración de calificaciones
+        if "__config__" in data:
+            self.guardar_config(data["__config__"])
+
     # =========================
-    # Descarga de datos completa (MySQL -> Memoria Principal)
+    # Descarga de datos completa (DB -> Memoria Principal)
     # =========================
     def get_all(self):
         """
-        Descarga todos la información base desde MySQL y la organiza en
+        Descarga todos la información base desde la BD y la organiza en
         el formato oficial de nuestro diccionario global (en memoria).
         La función data_manager.cargar() se encarga de llamar a este y luego
         combinar sus resultados con los parciales remanentes de datos.json
@@ -128,14 +171,14 @@ class CloudSync:
 
         # 1. Obtener todas las asignaturas
         asignaturas = self.db.ejecutar_consulta("SELECT nombre FROM asignaturas")
-        
+
         for asig in asignaturas:
             nombre_asig = asig['nombre']
             data[nombre_asig] = {}
 
             # 2. Obtener grupos para esta asignatura
             grupos = self.db.ejecutar_consulta("SELECT nombre FROM grupos WHERE asignatura = %s", (nombre_asig,))
-            
+
             for grp in grupos:
                 nombre_grp = grp['nombre']
                 data[nombre_asig][nombre_grp] = []
@@ -150,13 +193,18 @@ class CloudSync:
                     data[nombre_asig][nombre_grp].append({
                         "nombre": est['nombre'],
                         "notas": {
-                            "final": int(float(est['final'])),
-                            "portafolio": int(float(est['portafolio'])),
-                            "parciales": [], # Estos se cargan del JSON si existen
-                            "labs": [],
+                            "final":        int(float(est['final'])),
+                            "portafolio":   int(float(est['portafolio'])),
+                            "parciales":    [],  # Estos se cargan del JSON si existen
+                            "labs":         [],
                             "asignaciones": [],
-                            "asistencia": 0
+                            "asistencia":   0
                         }
                     })
-        
+
+        # 4. Recuperar la configuración de calificaciones desde la BD
+        config = self.get_config()
+        if config:
+            data["__config__"] = config
+
         return data

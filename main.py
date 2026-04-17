@@ -1,6 +1,15 @@
 import os
 import sys
 
+# Forzar UTF-8 en la terminal de Windows para que los emojis no causen errores
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 # Asegurar que el directorio raíz del proyecto esté en el sys.path
 root_path = os.path.dirname(os.path.abspath(__file__))
 if root_path not in sys.path:

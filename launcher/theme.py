@@ -84,9 +84,13 @@ def apply_theme_to_widget(widget, dark_mode):
 
         elif wtype == "Entry":
             widget.configure(
-                bg=bg_dark_input if dark_mode else bg_light_input, 
-                fg=fg_dark if dark_mode else fg_light, 
-                insertbackground=fg_dark if dark_mode else fg_light
+                bg=bg_dark_input if dark_mode else bg_light_input,
+                fg=fg_dark if dark_mode else fg_light,
+                insertbackground=fg_dark if dark_mode else fg_light,
+                # readonly y disabled también necesitan fondo oscuro explícito
+                readonlybackground=bg_dark_input if dark_mode else "#e8e8e8",
+                disabledbackground=bg_dark_input if dark_mode else "#e8e8e8",
+                disabledforeground="#888888" if dark_mode else "#555555"
             )
             
         elif wtype == "Button":
