@@ -1,6 +1,6 @@
 import os
-import mysql.connector
-from mysql.connector import Error
+import psycopg2
+import psycopg2.extras
 from dotenv import load_dotenv
 
 # Carga variables de entorno desde la carpeta config/ donde vive el .env
@@ -21,40 +21,49 @@ class DatabaseAuth:
 
     def conectar(self):
         try:
-            self.conn = mysql.connector.connect(
-                host=os.getenv("DB_HOST", "127.0.0.1"),
-                user=os.getenv("DB_USER", "root"),     
-                password=os.getenv("DB_PASSWORD", "06102005"),
-                database=os.getenv("DB_NAME", "gestion_academica"),
-                port=os.getenv("DB_PORT", "3306")
+            self.conn = psycopg2.connect(
+                os.getenv("DATABASE_URL"),
+                connect_timeout=10
             )
-        except Error as e:
-            print(f"❌ Error al conectar a la Base de Datos de Usuarios: {e}")
+            self.conn.autocommit = False
+        except psycopg2.Error as e:
+            print(f"❌ Error al conectar a la Base de Datos: {e}")
             self.conn = None
 
+    def _ensure_connection(self):
+        """Reconecta si la conexión está cerrada o perdida."""
+        try:
+            if self.conn is None or self.conn.closed:
+                self.conectar()
+            else:
+                # Verifica que la conexión esté viva con un ping liviano
+                with self.conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+        except psycopg2.Error:
+            self.conectar()
+
     def ejecutar_consulta(self, query, params=None):
-        if self.conn and self.conn.is_connected():
+        self._ensure_connection()
+        if self.conn and not self.conn.closed:
             try:
-                # To clear unread results, though dictionary=True usually reads all
-                cursor = self.conn.cursor(dictionary=True)
-                cursor.execute(query, params or ())
-                res = cursor.fetchall()
-                cursor.close()
-                return res
-            except Error as e:
+                with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
+                    cursor.execute(query, params or ())
+                    return [dict(row) for row in cursor.fetchall()]
+            except psycopg2.Error as e:
                 print(f"❌ Error DB Consulta: {e}")
+                self.conn.rollback()
                 return []
         return []
 
     def ejecutar_accion(self, query, params=None):
-        if self.conn and self.conn.is_connected():
+        self._ensure_connection()
+        if self.conn and not self.conn.closed:
             try:
-                cursor = self.conn.cursor()
-                cursor.execute(query, params or ())
+                with self.conn.cursor() as cursor:
+                    cursor.execute(query, params or ())
                 self.conn.commit()
-                cursor.close()
                 return True
-            except Error as e:
+            except psycopg2.Error as e:
                 print(f"❌ Error DB Acción: {e}")
                 self.conn.rollback()
                 return False
