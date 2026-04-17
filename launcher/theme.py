@@ -5,12 +5,11 @@ import tkinter as tk
 THEME_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "theme.json")
 
 def load_theme():
-    """Carga la preferencia de tema desde un archivo local"""
+    """Carga la preferencia de tema (oscuro/claro) desde disco."""
     try:
         if os.path.exists(THEME_FILE):
             with open(THEME_FILE, 'r') as f:
-                data = json.load(f)
-                return data.get("dark_mode", False)
+                return json.load(f).get("dark_mode", False)
     except Exception:
         pass
     return False
