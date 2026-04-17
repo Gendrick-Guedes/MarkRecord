@@ -2,6 +2,7 @@ from tkinter import simpledialog, messagebox
 import random
 import string
 from gestion_academica.ui.ui_listas import limpiar_nombre
+from gestion_academica.data.data_manager import guardar_estudiante_quirurgico, eliminar_estudiante_quirurgico
 
 # =======================
 # Gestión de asignaturas
@@ -190,8 +191,8 @@ def agregar_estudiante(data, guardar, lista_asignaturas, lista_grupos, actualiza
             }
         })
 
-        # Guarda cambios
-        guardar()
+        # Guarda cambios de forma quirúrgica (Alta velocidad)
+        guardar_estudiante_quirurgico(data[a][g][-1], a, g)
 
         # Actualiza interfaz
         actualizar()
@@ -228,10 +229,9 @@ def eliminar_estudiante(data, guardar, lista_asignaturas, lista_grupos, lista_es
             # Eliminamos de atrás hacia adelante para no romper los índices
             for i in sorted(indices_e, reverse=True):
                 if i < len(data[a][g]):
-                    del data[a][g][i]
-
-            # Guarda cambios
-            guardar()
+                    est = data[a][g].pop(i)
+                    # Elimina de la nube de forma rápida
+                    eliminar_estudiante_quirurgico(est)
 
             # Actualiza la interfaz de estudiantes
             actualizar()

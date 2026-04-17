@@ -88,9 +88,9 @@ def generar_datos(data, guardar, actualizar_asignaturas):
             # Convierte la cantidad ingresada a número
             cantidad = int(cantidad_entry.get())
             
-            # Limitar a máximo 20 asignaturas para evitar colapsos
-            if cantidad > 20:
-                messagebox.showwarning("Límite excedido", "Por seguridad, solo puedes generar hasta 20 asignaturas a la vez.")
+            # Limitar a máximo 100 asignaturas para evitar colapsos
+            if cantidad > 100:
+                messagebox.showwarning("Límite excedido", "Por seguridad, solo puedes generar hasta 100 asignaturas a la vez.")
                 return
             
             if cantidad <= 0:

@@ -48,12 +48,28 @@ class DatabaseAuth:
             try:
                 with self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cursor:
                     cursor.execute(query, params or ())
-                    return [dict(row) for row in cursor.fetchall()]
+                    res = cursor.fetchall()
+                    return [dict(row) for row in res]
             except psycopg2.Error as e:
                 print(f"❌ Error DB Consulta: {e}")
                 self.conn.rollback()
                 return []
         return []
+
+    def ejecutar_lote(self, query, values):
+        """Ejecuta una inserción masiva usando execute_values."""
+        self._ensure_connection()
+        if self.conn and not self.conn.closed:
+            try:
+                with self.conn.cursor() as cursor:
+                    psycopg2.extras.execute_values(cursor, query, values)
+                self.conn.commit()
+                return True
+            except psycopg2.Error as e:
+                print(f"❌ Error DB Lote: {e}")
+                self.conn.rollback()
+                return False
+        return False
 
     def ejecutar_accion(self, query, params=None):
         self._ensure_connection()

@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 from gestion_academica.ui.ui_listas import limpiar_nombre
 from gestion_academica.models.notas import DEFAULT_CONFIG
+from gestion_academica.data.data_manager import guardar_estudiante_quirurgico
 from launcher.theme import load_theme, apply_theme_to_widget
 
 
@@ -284,8 +285,8 @@ def editar(data, guardar, lista_asignaturas, lista_grupos, lista_estudiantes, ac
                     "asistencia":   validar_asistencia(e_asis.get())
                 }
 
-                # Guarda cambios en json local persistente y en la nube si hay red
-                guardar()
+                # Guarda cambios de forma quirúrgica (Alta velocidad)
+                guardar_estudiante_quirurgico(est, a, g)
 
                 # Actualiza la interfaz visual de estudiantes
                 actualizar_estudiantes()
