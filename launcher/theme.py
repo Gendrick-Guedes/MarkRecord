@@ -35,12 +35,10 @@ def apply_theme_to_widget(widget, dark_mode):
     bg_dark_input = "#1f1f1f"
     bg_dark_btn = "#333333"
     
-    # Paleta Clara (Por Defecto de Tkinter/Windows)
-    bg_light = "SystemButtonFace" # Default windows background
+    # Paleta Clara (Universal)
+    bg_light = "#f0f0f0" 
     if widget.tk.call('tk', 'windowingsystem') == 'x11':
         bg_light = "#d9d9d9"
-    elif widget.tk.call('tk', 'windowingsystem') == 'aqua': # MacOS
-        bg_light = "systemWindowBackgroundColor"
     
     fg_light = "#000000"
     bg_light_input = "#ffffff"
@@ -119,7 +117,7 @@ class GlobalTheme:
     def setup_menu(self):
         # En lugar de un Menú nativo (que Windows no deja pintar de oscuro),
         # usamos un Frame superior persistente.
-        self.top_bar = tk.Frame(self.root, bg="#171717" if self.dark_mode.get() else "SystemButtonFace")
+        self.top_bar = tk.Frame(self.root, bg="#171717" if self.dark_mode.get() else "#f0f0f0")
         self.top_bar._is_theme_bar = True  # Marca para evitar que selector.py la elimine
         self.top_bar.pack(side="top", fill="x")
         
@@ -128,7 +126,7 @@ class GlobalTheme:
             text="Modo Oscuro", 
             variable=self.dark_mode, 
             command=self.toggle_and_apply,
-            bg="#171717" if self.dark_mode.get() else "SystemButtonFace",
+            bg="#171717" if self.dark_mode.get() else "#f0f0f0",
             fg="#eeeeee" if self.dark_mode.get() else "#000000",
             selectcolor="#1f1f1f" if self.dark_mode.get() else "#ffffff"
         )
@@ -140,7 +138,7 @@ class GlobalTheme:
 
     def apply(self):
         # Ajustamos el color de la barra superior
-        bg_color = "#171717" if self.dark_mode.get() else "SystemButtonFace"
+        bg_color = "#171717" if self.dark_mode.get() else "#f0f0f0"
         fg_color = "#eeeeee" if self.dark_mode.get() else "#000000"
         sel_color = "#1f1f1f" if self.dark_mode.get() else "#ffffff"
         
